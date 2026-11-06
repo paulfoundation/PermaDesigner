@@ -146,79 +146,240 @@
        //This function will check for permaworkspacedb. If not found, it will create it with workspace_species and workspace_flow object stores
        init_permaworkspacedb();
        
-       //This function will disable all buttons except for the ones required to start new workspace or open an existing perma file
-       //init_workbenchcontrols();
-       
-       //This function will create necessary dialog boxes and create their respective event bindings
-       //init_dialog();
-       
-       var dlgheight =  screen.availHeight * 0.85;
-       var dlgwidth =  screen.availWidth * 0.65; 
-  
+       var dlgheight = screen.availHeight * 0.85;
+       var dlgwidth = screen.availWidth * 0.65;
+
+       // Search Dialog
        $('#SearchDialog').dialog({autoOpen: false,
-       	                        dialogClass: 'SearchDialog',
-       	                        height: dlgheight,
-                                width: dlgwidth,  
+                                dialogClass: 'SearchDialog',
+                                height: dlgheight,
+                                width: dlgwidth,
                                 minHeight: dlgheight/2,
                                 minWidth: dlgwidth/2,
                                 modal: true,
                                 buttons:[{
-                                	       text:'Search',class:'DialogBtn',click:function(){
-                                	       	searchspecies();
-                                	       	
-                                	       }
-                                	      },
-                                	     {
-                                	       text:'Add',class:'DialogBtn',click:function(){}
-                                	      },
-                                	     {
-                                	       text:'Cancel',class:'DialogBtn',click:function(){
-                                	     	                                                $( this ).dialog( "close" );
-                                	     	                                              }
-                                	      }                                 	    
-                                	    ],
+                                           text:'Search',class:'DialogBtn',click:function(){
+                                            searchspecies();
+                                           }
+                                          },
+                                         {
+                                           text:'Add',class:'DialogBtn',click:function(){}
+                                          },
+                                         {
+                                           text:'Cancel',class:'DialogBtn',click:function(){
+                                                                                            $( this ).dialog( "close" );
+                                                                                          }
+                                          }
+                                        ],
                                  open: function(){
-                                 	 
-                                 	$(this).find('input:text').val('');
-                                 	$('.MatchedResult').remove();
-                                 	
-                                 	
+                                    $(this).find('input:text').val('');
+                                    $('.MatchedResult').remove();
                                  }
-                                
                                  });
-        
-    
-        
-        $('#SpeciesBtn').button().click(function() {
-       
-          $('#SearchDialog').dialog('open');
-        });
 
-       
-        createshapeinstance('chicken');
-        createshapeinstance('duck');
-        
-   
-    
-   jsPlumb.connect( { 
-   source:'chicken',
-   target:'duck' ,
-   paintStyle:{strokeStyle:'blue', lineWidth:6 },
-   endpointStyle:{ fillStyle:'blue'},
-   anchors:['RightMiddle', 'LeftMiddle' ],
-   overlays:[[ 'Label', { cssClass:'connectorlabel',label:'Edit Flow'} ]]
-  
-   
-   });
-   
-  
-   $('#guildtree').tree({
-        data:data
-    });
-  
-  
-        
+       // New Project Dialog
+       $('#NewProjectDialog').dialog({
+           autoOpen: false,
+           modal: true,
+           width: 400,
+           buttons: [
+               { text: 'Create', class: 'DialogBtn', click: function() {
+                   var name = $.trim($('#projectnameinput').val());
+                   if (!name) { alert('Please enter a project name.'); return; }
+                   var dlg = this;
+                   ProjectManager.createProject(name, function(err, project) {
+                       if (err) { alert('Error creating project: ' + err.message); return; }
+                       updateProjectStatus();
+                       $(dlg).dialog('close');
+                   });
+               }},
+               { text: 'Cancel', class: 'DialogBtn', click: function() {
+                   $(this).dialog('close');
+               }}
+           ],
+           open: function() {
+               $('#projectnameinput').val('');
+           }
+       });
+
+       // Open Project Dialog
+       $('#OpenProjectDialog').dialog({
+           autoOpen: false,
+           modal: true,
+           width: 500,
+           height: 400,
+           buttons: [
+               { text: 'Close', class: 'DialogBtn', click: function() {
+                   $(this).dialog('close');
+               }}
+           ],
+           open: function() {
+               loadProjectList();
+           }
+       });
+
+       // Delete Project Dialog
+       $('#DeleteProjectDialog').dialog({
+           autoOpen: false,
+           modal: true,
+           width: 350,
+           buttons: [
+               { text: 'Delete', class: 'DialogBtn', click: function() {
+                   var dlg = this;
+                   var projectId = $(this).data('projectId');
+                   ProjectManager.deleteProject(projectId, function(err) {
+                       if (err) { alert('Error deleting project: ' + err.message); return; }
+                       updateProjectStatus();
+                       $(dlg).dialog('close');
+                   });
+               }},
+               { text: 'Cancel', class: 'DialogBtn', click: function() {
+                   $(this).dialog('close');
+               }}
+           ]
+       });
+
+       // Import project file handler
+       $('#importprojectfile').on('change', function(e) {
+           var file = e.target.files[0];
+           if (!file) return;
+           ProjectManager.importProject(file, function(err, project) {
+               if (err) { alert('Error importing project: ' + err.message); return; }
+               updateProjectStatus();
+               $('#OpenProjectDialog').dialog('close');
+           });
+           $(this).val('');
+       });
+
+       // Toolbar button handlers
+       $('#NewGuildBtn').click(function() {
+           if (ProjectManager.getCurrentProject()) {
+               if (confirm('Save current project before creating a new one?')) {
+                   ProjectManager.saveProject(function() {});
+               }
+           }
+           $('#NewProjectDialog').dialog('open');
+       });
+
+       $('#OpenGuildBtn').click(function() {
+           $('#OpenProjectDialog').dialog('open');
+       });
+
+       $('#CloseGuildBtn').click(function() {
+           var current = ProjectManager.getCurrentProject();
+           if (!current) return;
+           if (confirm('Save project "' + current.name + '" before closing?')) {
+               ProjectManager.saveProject(function(err) {
+                   if (err) alert('Error saving: ' + err.message);
+                   ProjectManager.closeProject();
+                   updateProjectStatus();
+               });
+           } else {
+               ProjectManager.closeProject();
+               updateProjectStatus();
+           }
+       });
+
+       $('#SaveGuildBtn').click(function() {
+           var current = ProjectManager.getCurrentProject();
+           if (!current) {
+               alert('No project is open. Create or open a project first.');
+               return;
+           }
+           ProjectManager.saveProject(function(err) {
+               if (err) { alert('Error saving project: ' + err.message); return; }
+               updateProjectStatus();
+               alert('Project "' + current.name + '" saved.');
+           });
+       });
+
+       $('#DeleteBtn').click(function() {
+           var current = ProjectManager.getCurrentProject();
+           if (!current) {
+               alert('No project is open.');
+               return;
+           }
+           $('#DeleteProjectMessage').text('Are you sure you want to delete "' + current.name + '"?');
+           $('#DeleteProjectDialog').data('projectId', current.id).dialog('open');
+       });
+
+       $('#SpeciesBtn').click(function() {
+           $('#SearchDialog').dialog('open');
+       });
+
+       // Init tree with default data
+       $('#guildtree').tree({ data: data });
+
+       updateProjectStatus();
+
 	}); // end of ready function
+
+    function updateProjectStatus() {
+        var current = ProjectManager.getCurrentProject();
+        if (current) {
+            $('#projectStatus').text('Project: ' + current.name);
+        } else {
+            $('#projectStatus').text('No project open');
+        }
+    }
+
+    function loadProjectList() {
+        var $list = $('#ProjectList');
+        $list.html('<p style="color: #666;">Loading projects...</p>');
+        ProjectManager.listProjects(function(err, projects) {
+            if (err) { $list.html('<p>Error loading projects.</p>'); return; }
+            if (projects.length === 0) {
+                $list.html('<p style="color: #666;">No saved projects. Create a new project or import one from a file.</p>');
+                return;
+            }
+            var html = '<table class="projectlisttable" cellpadding="4" cellspacing="0" style="width:100%; border-collapse: collapse;">';
+            html += '<tr style="background: #0A2A0A; color: #BCF5A9;"><th style="text-align:left; padding:6px;">Name</th><th style="text-align:left; padding:6px;">Modified</th><th style="padding:6px;">Actions</th></tr>';
+            $.each(projects, function(i, p) {
+                var modified = new Date(p.modified).toLocaleDateString();
+                var rowBg = (i % 2 === 0) ? '#f9f9f9' : '#eeeeee';
+                html += '<tr style="background:' + rowBg + '; border-bottom: 1px solid #ddd;">';
+                html += '<td style="padding:6px;">' + $('<span>').text(p.name).html() + '</td>';
+                html += '<td style="padding:6px;">' + modified + '</td>';
+                html += '<td style="padding:6px; text-align:center;">';
+                html += '<button class="openProjectBtn" data-id="' + p.id + '" style="margin-right:4px;">Open</button>';
+                html += '<button class="exportProjectBtn" data-id="' + p.id + '">Export</button>';
+                html += '<button class="deleteProjectListBtn" data-id="' + p.id + '" data-name="' + $('<span>').text(p.name).html() + '" style="margin-left:4px;">Delete</button>';
+                html += '</td></tr>';
+            });
+            html += '</table>';
+            $list.html(html);
+
+            $list.find('.openProjectBtn').button().click(function() {
+                var id = $(this).data('id');
+                ProjectManager.openProject(id, function(err, project) {
+                    if (err) { alert('Error opening project: ' + err.message); return; }
+                    updateProjectStatus();
+                    $('#OpenProjectDialog').dialog('close');
+                });
+            });
+
+            $list.find('.exportProjectBtn').button().click(function() {
+                var id = $(this).data('id');
+                ProjectManager.openProject(id, function(err) {
+                    if (err) { alert('Error: ' + err.message); return; }
+                    ProjectManager.exportProject();
+                    updateProjectStatus();
+                });
+            });
+
+            $list.find('.deleteProjectListBtn').button().click(function() {
+                var id = $(this).data('id');
+                var name = $(this).data('name');
+                if (confirm('Delete project "' + name + '"? This cannot be undone.')) {
+                    ProjectManager.deleteProject(id, function(err) {
+                        if (err) { alert('Error: ' + err.message); return; }
+                        updateProjectStatus();
+                        loadProjectList();
+                    });
+                }
+            });
+        });
+    }
 
 function init_permaworkspacedb(){
 	

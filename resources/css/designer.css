@@ -267,3 +267,18 @@ padding: 2px;
 	border-color:#000000;
 }
 
+.projectlisttable button {
+	font-size: 11px;
+	padding: 2px 8px;
+	cursor: pointer;
+}
+
+#ProjectList {
+	max-height: 250px;
+	overflow-y: auto;
+}
+
+#projectStatus {
+	color: #BCF5A9;
+}
+
